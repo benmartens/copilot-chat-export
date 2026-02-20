@@ -3,6 +3,7 @@ import { ChatTurn } from "./parser";
 interface RenderOptions {
   title: string;
   generatedAt: string;
+  version: string;
 }
 
 function escapeHtml(value: string): string {
@@ -172,12 +173,14 @@ function normalizeEventLine(line: string): string {
   return line.replace(/^[\s>*-]*(?:[✓✔☑✅]\s*)?/, "").trim();
 }
 
-const eventPattern = /^(?:planning|preparing|drafting|subagent\s*:|research\b|asked\s+\d+\s+questions\b|fetched\s+https?:\/\/)/i;
+const eventPattern = /^(?:planning|preparing|drafting|subagent\s*:|research\b|asked\s+\d+\s+questions\b|fetched\s+https?:\/\/|read\s+(?:file:\/\/|\[))/i;
+const readLinePattern = /^read\s+(?:file:\/\/\S+|\[([^\]]*)\]\((file:\/\/\S+?)\)(.*))/i;
 
 function extractAssistantEvents(content: string): { events: AssistantEvent[]; narrative: string } {
   const lines = content.split("\n");
   const narrativeLines: string[] = [];
   const fetchedUrls: string[] = [];
+  const readPaths: string[] = [];
   const nonFetched: string[] = [];
 
   for (const line of lines) {
@@ -186,12 +189,24 @@ function extractAssistantEvents(content: string): { events: AssistantEvent[]; na
       narrativeLines.push(line);
     } else if (/^fetched\s+/i.test(normalized)) {
       fetchedUrls.push(normalized.replace(/^fetched\s+/i, ""));
+    } else if (readLinePattern.test(normalized)) {
+      const m = normalized.match(readLinePattern);
+      if (m && m[2]) {
+        const suffix = (m[3] ?? "").trim();
+        const display = m[1]?.trim() || decodeURIComponent(m[2]);
+        readPaths.push(suffix ? `${display}, ${suffix}` : display);
+      } else {
+        readPaths.push(normalized.replace(/^read\s+/i, ""));
+      }
     } else {
       nonFetched.push(normalized);
     }
   }
 
   const events: AssistantEvent[] = nonFetched.map((summary) => ({ summary, details: [] }));
+  if (readPaths.length > 0) {
+    events.push({ summary: `Read files (${readPaths.length})`, details: readPaths });
+  }
   if (fetchedUrls.length > 0) {
     events.push({ summary: `Fetched sources (${fetchedUrls.length})`, details: fetchedUrls });
   }
@@ -475,7 +490,7 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
   <div class="wrap">
     <header class="top">
       <h1>${title}</h1>
-      <div class="meta">Generated ${generated}</div>
+      <div class="meta">v${escapeHtml(options.version)} &middot; Generated ${generated}</div>
     </header>
     <main class="thread">
       ${turnHtml}

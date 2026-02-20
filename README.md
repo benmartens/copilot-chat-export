@@ -7,6 +7,8 @@ Local VS Code extension to quick-export the currently focused Copilot chat as a 
 - Runs from Command Palette in one step.
 - Triggers `Chat: Copy All` for the focused chat view.
 - Parses the copied transcript into turns.
+- Renders Markdown with syntax-highlighted code blocks.
+- Collapses assistant activity (file reads, fetched URLs, planning steps) into expandable summaries to keep exports tidy.
 - Opens a preview of the rendered HTML without writing a file.
 - Saves an `.html` file only when you use the Save As command.
 
@@ -40,8 +42,7 @@ Local VS Code extension to quick-export the currently focused Copilot chat as a 
 - Create installable VSIX (runs compile automatically): `npm run package:vsix`
 - Install local VSIX into normal VS Code: `npm run install:local`
 - One command to rebuild + reinstall: `npm run refresh:local`
+  - After `refresh:local` completes, run **Developer: Reload Window** from the Command Palette (or restart VS Code) to pick up the new version.
 
-Prerequisite: the `code` CLI must be available on your `PATH`.
-If not, use `Extensions: Install from VSIX...` and select `copilot-chat-export.vsix` manually.
+Alternatively, use `Extensions: Install from VSIX...` and select `copilot-chat-export.vsix` manually.
 
-After making changes, rerun those two commands to update the installed extension.
