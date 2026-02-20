@@ -1,0 +1,51 @@
+{
+  "name": "chat-transcript-html-preview",
+  "displayName": "Chat Transcript HTML Preview",
+  "description": "Preview the focused Copilot chat as a self-contained HTML page in VS Code.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "chatTranscriptHtmlPreview.exportActiveChatToHtml",
+        "title": "Preview Active Chat as HTML",
+        "category": "Chat Transcript"
+      },
+      {
+        "command": "chatTranscriptHtmlPreview.exportActiveChatToHtmlSaveAs",
+        "title": "Save Active Chat to HTML As...",
+        "category": "Chat Transcript"
+      }
+    ],
+    "configuration": {
+      "title": "Chat Transcript HTML Preview",
+      "properties": {
+        "chatTranscriptHtmlPreview.openTarget": {
+          "type": "string",
+          "enum": [
+            "vscode",
+            "external"
+          ],
+          "default": "vscode",
+          "description": "Where to open exported HTML. 'vscode' opens in an in-editor preview. 'external' opens the saved file in your default browser."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.95.0",
+    "typescript": "^5.7.2"
+  }
+}
