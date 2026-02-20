@@ -2,6 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_notes:
+        description: "Release notes (leave blank for auto-generated notes)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -53,7 +58,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ steps.version.outputs.version }}" \
+          NOTES_ARG=""
+          if [ -n "${{ inputs.release_notes }}" ]; then
+            NOTES_ARG="--notes \"${{ inputs.release_notes }}\""
+          else
+            NOTES_ARG="--generate-notes"
+          fi
+          eval gh release create "v${{ steps.version.outputs.version }}" \
             copilot-chat-export.vsix \
             --title "v${{ steps.version.outputs.version }}" \
-            --generate-notes
+            $NOTES_ARG
