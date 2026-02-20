@@ -12,6 +12,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
@@ -20,6 +22,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Bump patch version
+        run: npm version patch --no-git-tag-version
+
       - name: Read version from package.json
         id: version
         run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
@@ -27,7 +32,7 @@ jobs:
       - name: Check tag does not already exist
         run: |
           if git ls-remote --tags origin "refs/tags/v${{ steps.version.outputs.version }}" | grep -q .; then
-            echo "::error::Tag v${{ steps.version.outputs.version }} already exists. Bump the version in package.json first."
+            echo "::error::Tag v${{ steps.version.outputs.version }} already exists."
             exit 1
           fi
 
@@ -35,6 +40,14 @@ jobs:
 
       - name: Package VSIX
         run: npx vsce package --out copilot-chat-export.vsix
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to v${{ steps.version.outputs.version }}"
+          git push
 
       - name: Create GitHub Release
         env:
