@@ -2,6 +2,8 @@
 
 Local VS Code extension to quick-export the currently focused Copilot chat as a fully self-contained HTML page.
 
+![Screenshot](screenshot.png)
+
 ## What it does
 
 - Runs from Command Palette in one step.
@@ -37,12 +39,16 @@ Local VS Code extension to quick-export the currently focused Copilot chat as a 
 - Build: `npm run compile`
 - Launch Extension Development Host: press `F5` in VS Code.
 
-## Install locally (no publishing)
+## Install locally
 
+### Manual Install
+- Download the latest release from https://github.com/benmartens/copilot-chat-export/releases
+- Install the vsix file. Use `Extensions: Install from VSIX...` and select `copilot-chat-export.vsix`.
+
+### Fresh Install from Source
 - Create installable VSIX (runs compile automatically): `npm run package:vsix`
 - Install local VSIX into normal VS Code: `npm run install:local`
-- One command to rebuild + reinstall: `npm run refresh:local`
-  - After `refresh:local` completes, run **Developer: Reload Window** from the Command Palette (or restart VS Code) to pick up the new version.
 
-Alternatively, use `Extensions: Install from VSIX...` and select the generated `.vsix` file manually.
-
+### Update an Existing Install from Source
+- Rebuild + reinstall: `npm run refresh:local`
+- After `refresh:local` completes, run **Developer: Reload Window** from the Command Palette (or restart VS Code) to pick up the new version.
