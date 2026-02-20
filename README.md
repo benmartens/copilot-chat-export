@@ -34,3 +34,14 @@ Local VS Code extension to quick-export the currently focused Copilot chat as a 
 - Install dependencies: `npm install`
 - Build: `npm run compile`
 - Launch Extension Development Host: press `F5` in VS Code.
+
+## Install locally (no publishing)
+
+- Create installable VSIX (runs compile automatically): `npm run package:vsix`
+- Install local VSIX into normal VS Code: `npm run install:local`
+- One command to rebuild + reinstall: `npm run refresh:local`
+
+Prerequisite: the `code` CLI must be available on your `PATH`.
+If not, use `Extensions: Install from VSIX...` and select `copilot-chat-export.vsix` manually.
+
+After making changes, rerun those two commands to update the installed extension.

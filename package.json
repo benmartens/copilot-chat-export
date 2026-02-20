@@ -1,9 +1,13 @@
 {
-  "name": "chat-transcript-html-preview",
-  "displayName": "Chat Transcript HTML Preview",
-  "description": "Preview the focused Copilot chat as a self-contained HTML page in VS Code.",
+  "name": "copilot-chat-export",
+  "displayName": "Copilot Chat Export",
+  "description": "Preview or save the focused Copilot chat as a self-contained HTML page in VS Code.",
   "version": "0.0.1",
   "publisher": "local",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/benmartens/copilot-chat-export"
+  },
   "engines": {
     "vscode": "^1.95.0"
   },
@@ -41,7 +45,11 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "prepackage:vsix": "npm run compile",
+    "package:vsix": "npx @vscode/vsce package --out copilot-chat-export.vsix",
+    "install:local": "code --install-extension copilot-chat-export.vsix --force",
+    "refresh:local": "npm run package:vsix && npm run install:local"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
