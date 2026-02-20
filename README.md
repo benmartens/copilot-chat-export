@@ -44,5 +44,5 @@ Local VS Code extension to quick-export the currently focused Copilot chat as a 
 - One command to rebuild + reinstall: `npm run refresh:local`
   - After `refresh:local` completes, run **Developer: Reload Window** from the Command Palette (or restart VS Code) to pick up the new version.
 
-Alternatively, use `Extensions: Install from VSIX...` and select `copilot-chat-export.vsix` manually.
+Alternatively, use `Extensions: Install from VSIX...` and select the generated `.vsix` file manually.
 

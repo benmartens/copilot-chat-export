@@ -47,8 +47,8 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "prepackage:vsix": "npm run compile",
-    "package:vsix": "npx @vscode/vsce package --out copilot-chat-export.vsix",
-    "install:local": "code --install-extension copilot-chat-export.vsix --force",
+    "package:vsix": "npx @vscode/vsce package",
+    "install:local": "node -e \"const{name,version}=require('./package.json');require('child_process').execSync('code --install-extension '+name+'-'+version+'.vsix --force',{stdio:'inherit'})\"",
     "refresh:local": "npm run package:vsix && npm run install:local"
   },
   "devDependencies": {
