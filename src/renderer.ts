@@ -1,4 +1,4 @@
-import { ChatTurn } from "./types";
+import { ChatTurn } from "./parser";
 
 interface RenderOptions {
   title: string;
@@ -10,7 +10,7 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
+    .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
 
@@ -20,15 +20,8 @@ function token(): string {
 
 function getLinkDisplayText(text: string, href: string): string {
   const trimmed = text.trim();
-  if (trimmed.length > 0) {
-    return trimmed;
-  }
-
-  try {
-    return decodeURIComponent(href);
-  } catch {
-    return href;
-  }
+  if (trimmed) { return trimmed; }
+  try { return decodeURIComponent(href); } catch { return href; }
 }
 
 function renderInlineMarkdown(input: string): string {
@@ -176,75 +169,38 @@ interface AssistantEvent {
 }
 
 function normalizeEventLine(line: string): string {
-  return line
-    .replace(/^[\s>*-]*(?:[✓✔☑✅]\s*)?/, "")
-    .trim();
+  return line.replace(/^[\s>*-]*(?:[✓✔☑✅]\s*)?/, "").trim();
 }
 
-function isEventLine(line: string): boolean {
-  const normalized = normalizeEventLine(line);
-  return (
-    /^(planning|preparing|drafting|subagent\s*:|research\b|asked\s+\d+\s+questions\b)/i.test(normalized) ||
-    /^fetched\s+https?:\/\//i.test(normalized)
-  );
-}
+const eventPattern = /^(?:planning|preparing|drafting|subagent\s*:|research\b|asked\s+\d+\s+questions\b|fetched\s+https?:\/\/)/i;
 
 function extractAssistantEvents(content: string): { events: AssistantEvent[]; narrative: string } {
   const lines = content.split("\n");
   const narrativeLines: string[] = [];
-  const eventLines: string[] = [];
+  const fetchedUrls: string[] = [];
+  const nonFetched: string[] = [];
 
   for (const line of lines) {
-    if (isEventLine(line.trim())) {
-      eventLines.push(normalizeEventLine(line));
-      continue;
+    const normalized = normalizeEventLine(line.trim());
+    if (!eventPattern.test(normalized)) {
+      narrativeLines.push(line);
+    } else if (/^fetched\s+/i.test(normalized)) {
+      fetchedUrls.push(normalized.replace(/^fetched\s+/i, ""));
+    } else {
+      nonFetched.push(normalized);
     }
-
-    narrativeLines.push(line);
   }
 
-  const fetched = eventLines.filter((line) => /^fetched\s+https?:\/\//i.test(line));
-  const nonFetched = eventLines.filter((line) => !/^fetched\s+https?:\/\//i.test(line));
   const events: AssistantEvent[] = nonFetched.map((summary) => ({ summary, details: [] }));
-
-  if (fetched.length > 0) {
-    const fetchedUrls = fetched.map((line) => line.replace(/^fetched\s+/i, ""));
-    events.push({
-      summary: `Fetched sources (${fetchedUrls.length})`,
-      details: fetchedUrls
-    });
+  if (fetchedUrls.length > 0) {
+    events.push({ summary: `Fetched sources (${fetchedUrls.length})`, details: fetchedUrls });
   }
 
-  return {
-    events,
-    narrative: narrativeLines.join("\n").trim()
-  };
-}
-
-function roleClass(role: ChatTurn["role"]): string {
-  if (role === "user") {
-    return "user";
-  }
-
-  if (role === "assistant") {
-    return "assistant";
-  }
-
-  if (role === "system") {
-    return "system";
-  }
-
-  return "unknown";
-}
-
-function renderMessageContent(content: string): string {
-  return renderMarkdown(content);
+  return { events, narrative: narrativeLines.join("\n").trim() };
 }
 
 function renderTurn(turn: ChatTurn): string {
-  const role = roleClass(turn.role);
-
-  if (role === "assistant") {
+  if (turn.role === "assistant") {
     const { events, narrative } = extractAssistantEvents(turn.content);
     const eventHtml = events
       .map((event) => {
@@ -258,10 +214,10 @@ function renderTurn(turn: ChatTurn): string {
       })
       .join("");
 
-    const narrativeHtml = narrative ? `<section class="message">${renderMessageContent(narrative)}</section>` : "";
+    const narrativeHtml = narrative ? `<section class="message">${renderMarkdown(narrative)}</section>` : "";
 
     return `
-    <article class="turn ${role}">
+    <article class="turn assistant">
       <section class="assistant-wrap">
         ${eventHtml ? `<section class="events">${eventHtml}</section>` : ""}
         ${narrativeHtml}
@@ -270,17 +226,9 @@ function renderTurn(turn: ChatTurn): string {
   `;
   }
 
-  if (role === "user") {
-    return `
-    <article class="turn ${role}">
-      <section class="message">${renderMessageContent(turn.content)}</section>
-    </article>
-  `;
-  }
-
   return `
-    <article class="turn ${role}">
-      <section class="message">${renderMessageContent(turn.content)}</section>
+    <article class="turn ${turn.role}">
+      <section class="message">${renderMarkdown(turn.content)}</section>
     </article>
   `;
 }
