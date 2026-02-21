@@ -39,7 +39,7 @@ async function executeExportFlow(saveAs: boolean): Promise<void> {
 
   const generatedAt = new Date().toLocaleString();
   const version: string = vscode.extensions.getExtension("local.copilot-chat-export")?.packageJSON.version ?? "dev";
-  const title = `Copilot Chat Export — ${generatedAt}`;
+  const title = `Copilot Chat Export`;
   const html = renderTranscriptHtml(turns, { title, generatedAt, version });
 
   if (!saveAs) {

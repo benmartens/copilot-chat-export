@@ -6,4 +6,5 @@ src/**
 tsconfig.json
 .gitignore
 *.vsix
+screenshot.png
 !out/**
