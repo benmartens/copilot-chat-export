@@ -4,6 +4,7 @@ interface RenderOptions {
   title: string;
   generatedAt: string;
   version: string;
+  summary?: string;
 }
 
 function escapeHtml(value: string): string {
@@ -173,42 +174,79 @@ function normalizeEventLine(line: string): string {
   return line.replace(/^[\s>*-]*(?:[✓✔☑✅]\s*)?/, "").trim();
 }
 
-const eventPattern = /^(?:planning|preparing|drafting|subagent\s*:|research\b|asked\s+\d+\s+questions\b|fetched\s+https?:\/\/|read\s+(?:file:\/\/|\[))/i;
-const readLinePattern = /^read\s+(?:file:\/\/\S+|\[([^\]]*)\]\((file:\/\/\S+?)\)(.*))/i;
+const eventPattern = /^(?:planning|preparing|drafting|subagent\s*:|research\b|review\b|ask(?:ed|ing)\s+\d+\s+questions\b|fetched\s+https?:\/\/|read(?:ing)?\s+(?:file:\/\/|\[)|search(?:ed|ing)\s+for\b|starting:\s*\*.*?\*\s*\(\d+\/\d+\)|completed:\s*\*.*?\*\s*\(\d+\/\d+\)|generating\s+patch\b)/i;
+
+const PREFIX_WORD_COUNT = 2;
+const MIN_PREFIX_RUN = 3;
+
+function getPrefixWords(value: string, count: number): string[] {
+  const words = value.match(/[A-Za-z0-9]+(?:["'_-][A-Za-z0-9]+)*/g) ?? [];
+  return words.slice(0, count);
+}
+
+function getPrefixKey(value: string): string | null {
+  const prefixWords = getPrefixWords(value, PREFIX_WORD_COUNT);
+  if (prefixWords.length < PREFIX_WORD_COUNT) {
+    return null;
+  }
+
+  return prefixWords.map((word) => word.toLowerCase()).join(" ");
+}
+
+function getPrefixDisplay(value: string): string {
+  return getPrefixWords(value, PREFIX_WORD_COUNT).join(" ");
+}
 
 function extractAssistantEvents(content: string): { events: AssistantEvent[]; narrative: string } {
   const lines = content.split("\n");
   const narrativeLines: string[] = [];
-  const fetchedUrls: string[] = [];
-  const readPaths: string[] = [];
-  const nonFetched: string[] = [];
+  const eventLines: string[] = [];
+  const events: AssistantEvent[] = [];
 
   for (const line of lines) {
     const normalized = normalizeEventLine(line.trim());
-    if (!eventPattern.test(normalized)) {
-      narrativeLines.push(line);
-    } else if (/^fetched\s+/i.test(normalized)) {
-      fetchedUrls.push(normalized.replace(/^fetched\s+/i, ""));
-    } else if (readLinePattern.test(normalized)) {
-      const m = normalized.match(readLinePattern);
-      if (m && m[2]) {
-        const suffix = (m[3] ?? "").trim();
-        const display = m[1]?.trim() || decodeURIComponent(m[2]);
-        readPaths.push(suffix ? `${display}, ${suffix}` : display);
-      } else {
-        readPaths.push(normalized.replace(/^read\s+/i, ""));
-      }
+    if (eventPattern.test(normalized)) {
+      eventLines.push(normalized);
     } else {
-      nonFetched.push(normalized);
+      narrativeLines.push(line);
     }
   }
 
-  const events: AssistantEvent[] = nonFetched.map((summary) => ({ summary, details: [] }));
-  if (readPaths.length > 0) {
-    events.push({ summary: `Read files (${readPaths.length})`, details: readPaths });
-  }
-  if (fetchedUrls.length > 0) {
-    events.push({ summary: `Fetched sources (${fetchedUrls.length})`, details: fetchedUrls });
+  let index = 0;
+  while (index < eventLines.length) {
+    const normalized = eventLines[index];
+    const currentPrefixKey = getPrefixKey(normalized);
+
+    if (!currentPrefixKey) {
+      events.push({ summary: normalized, details: [] });
+      index += 1;
+      continue;
+    }
+
+    const details: string[] = [normalized];
+    let runEnd = index + 1;
+    while (runEnd < eventLines.length) {
+      const nextNormalized = eventLines[runEnd];
+      const nextPrefixKey = getPrefixKey(nextNormalized);
+      if (!nextPrefixKey || nextPrefixKey !== currentPrefixKey) {
+        break;
+      }
+
+      details.push(nextNormalized);
+      runEnd += 1;
+    }
+
+    if (details.length >= MIN_PREFIX_RUN) {
+      events.push({
+        summary: `${getPrefixDisplay(normalized)}… (${details.length})`,
+        details,
+      });
+      index = runEnd;
+      continue;
+    }
+
+    events.push({ summary: normalized, details: [] });
+    index += 1;
   }
 
   return { events, narrative: narrativeLines.join("\n").trim() };
@@ -251,6 +289,9 @@ function renderTurn(turn: ChatTurn): string {
 export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions): string {
   const generated = escapeHtml(options.generatedAt);
   const title = escapeHtml(options.title);
+  const summaryHtml = options.summary?.trim()
+    ? `<section class="summary"><h2>Summary</h2>${renderMarkdown(options.summary.trim())}</section>`
+    : "";
   const turnHtml = turns.map((turn) => renderTurn(turn)).join("\n");
 
   return `<!DOCTYPE html>
@@ -323,6 +364,27 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       display: flex;
       flex-direction: column;
       gap: 12px;
+    }
+
+    .summary {
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--user-border);
+      border-radius: 10px;
+      background: var(--panel-2);
+    }
+
+    .summary h2 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .summary p:last-child {
+      margin-bottom: 0;
     }
 
     .turn {
@@ -492,6 +554,7 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       <h1>${title}</h1>
       <div class="meta">v${escapeHtml(options.version)} &middot; Generated ${generated}</div>
     </header>
+    ${summaryHtml}
     <main class="thread">
       ${turnHtml}
     </main>

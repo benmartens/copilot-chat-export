@@ -31,6 +31,11 @@
     "configuration": {
       "title": "Chat Transcript HTML Preview",
       "properties": {
+        "chatTranscriptHtmlPreview.generateSummary": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use AI to generate a short title (5 words or fewer) and summary near the top of the exported HTML."
+        },
         "chatTranscriptHtmlPreview.openTarget": {
           "type": "string",
           "enum": [

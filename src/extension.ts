@@ -2,9 +2,21 @@ import * as vscode from "vscode";
 import * as path from "node:path";
 import { parseTranscript } from "./parser";
 import { renderTranscriptHtml } from "./renderer";
+import { generateInsights } from "./summarizer";
 
 const COMMAND_ID = "chatTranscriptHtmlPreview.exportActiveChatToHtml";
 const COMMAND_SAVE_AS_ID = "chatTranscriptHtmlPreview.exportActiveChatToHtmlSaveAs";
+const DEFAULT_TITLE = "Copilot Chat Export";
+
+function slugifyFilePart(value: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+
+  return slug || "copilot-chat-export";
+}
 
 function openHtmlPreview(title: string, html: string): vscode.WebviewPanel {
   const panel = vscode.window.createWebviewPanel(
@@ -37,17 +49,37 @@ async function executeExportFlow(saveAs: boolean): Promise<void> {
     throw new Error("Transcript was captured but no messages were detected.");
   }
 
+  const config = vscode.workspace.getConfiguration("chatTranscriptHtmlPreview");
+  const shouldGenerateSummary = config.get<boolean>("generateSummary", true);
+
+  let title = DEFAULT_TITLE;
+  let summary: string | undefined;
+
+  if (shouldGenerateSummary) {
+    const insights = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "Generating chat summary...",
+      },
+      async () => generateInsights(turns)
+    );
+
+    if (insights) {
+      title = insights.title;
+      summary = insights.summary;
+    }
+  }
+
   const generatedAt = new Date().toLocaleString();
   const version: string = vscode.extensions.getExtension("local.copilot-chat-export")?.packageJSON.version ?? "dev";
-  const title = `Copilot Chat Export`;
-  const html = renderTranscriptHtml(turns, { title, generatedAt, version });
+  const html = renderTranscriptHtml(turns, { title, generatedAt, version, summary });
 
   if (!saveAs) {
     openHtmlPreview(title, html);
     return;
   }
 
-  const fileName = `copilot-chat-export-${new Date().toISOString().replace(/[:.]/g, "-")}.html`;
+  const fileName = `${slugifyFilePart(title)}-${new Date().toISOString().replace(/[:.]/g, "-")}.html`;
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
   const defaultUri = workspaceRoot
     ? vscode.Uri.joinPath(workspaceRoot, fileName)
@@ -66,7 +98,7 @@ async function executeExportFlow(saveAs: boolean): Promise<void> {
   await vscode.workspace.fs.createDirectory(folderUri);
   await vscode.workspace.fs.writeFile(selectedUri, new TextEncoder().encode(html));
 
-  const openTarget = vscode.workspace.getConfiguration("chatTranscriptHtmlPreview").get<"vscode" | "external">("openTarget", "vscode");
+  const openTarget = config.get<"vscode" | "external">("openTarget", "vscode");
   if (openTarget === "external") {
     await vscode.env.openExternal(selectedUri);
   } else {
