@@ -1,4 +1,5 @@
 import { ChatTurn } from "./parser";
+import { marked, Renderer } from "marked";
 
 interface RenderOptions {
   title: string;
@@ -25,6 +26,28 @@ function getLinkDisplayText(text: string, href: string): string {
   if (trimmed) { return trimmed; }
   try { return decodeURIComponent(href); } catch { return href; }
 }
+
+const markedRenderer = new Renderer();
+
+// Open links in new tab, fall back to decoded URL when link text is empty
+markedRenderer.link = function (href: string, title: string | null | undefined, text: string): string {
+  const titleAttr = title ? ` title="${title}"` : "";
+  const displayText = getLinkDisplayText(text, href);
+  return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${displayText}</a>`;
+};
+
+// Suppress empty code blocks (matches old renderer behavior)
+markedRenderer.code = function (code: string, language: string | undefined): string {
+  if (!code.trim()) { return ""; }
+  const lang = language ? ` class="language-${escapeHtml(language)}"` : "";
+  return `<pre><code${lang}>${escapeHtml(code)}</code></pre>\n`;
+};
+
+marked.setOptions({
+  gfm: true,
+  breaks: false,
+  renderer: markedRenderer,
+});
 
 function renderInlineMarkdown(input: string): string {
   let html = escapeHtml(input);
@@ -62,107 +85,7 @@ function renderInlineMarkdown(input: string): string {
 }
 
 function renderMarkdown(content: string): string {
-  const lines = content.split("\n");
-  const htmlParts: string[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index];
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-      index += 1;
-      continue;
-    }
-
-    if (trimmed.startsWith("```")) {
-      index += 1;
-      const codeLines: string[] = [];
-
-      while (index < lines.length && !lines[index].trim().startsWith("```")) {
-        codeLines.push(lines[index]);
-        index += 1;
-      }
-
-      if (index < lines.length && lines[index].trim().startsWith("```")) {
-        index += 1;
-      }
-
-      const codeContent = codeLines.join("\n");
-      if (codeContent.trim().length > 0) {
-        htmlParts.push(`<pre><code>${escapeHtml(codeContent)}</code></pre>`);
-      }
-      continue;
-    }
-
-    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
-    if (headingMatch) {
-      const level = headingMatch[1].length;
-      htmlParts.push(`<h${level}>${renderInlineMarkdown(headingMatch[2].trim())}</h${level}>`);
-      index += 1;
-      continue;
-    }
-
-    if (/^[-*+]\s+/.test(trimmed)) {
-      const items: string[] = [];
-      while (index < lines.length) {
-        const listMatch = lines[index].trim().match(/^[-*+]\s+(.+)$/);
-        if (!listMatch) {
-          break;
-        }
-        items.push(`<li>${renderInlineMarkdown(listMatch[1])}</li>`);
-        index += 1;
-      }
-      htmlParts.push(`<ul>${items.join("")}</ul>`);
-      continue;
-    }
-
-    if (/^\d+\.\s+/.test(trimmed)) {
-      const items: string[] = [];
-      while (index < lines.length) {
-        const listMatch = lines[index].trim().match(/^\d+\.\s+(.+)$/);
-        if (!listMatch) {
-          break;
-        }
-        items.push(`<li>${renderInlineMarkdown(listMatch[1])}</li>`);
-        index += 1;
-      }
-      htmlParts.push(`<ol>${items.join("")}</ol>`);
-      continue;
-    }
-
-    if (trimmed.startsWith(">")) {
-      const quoteLines: string[] = [];
-      while (index < lines.length && lines[index].trim().startsWith(">")) {
-        quoteLines.push(lines[index].trim().replace(/^>\s?/, ""));
-        index += 1;
-      }
-      htmlParts.push(`<blockquote><p>${renderInlineMarkdown(quoteLines.join(" "))}</p></blockquote>`);
-      continue;
-    }
-
-    const paragraphLines: string[] = [];
-    while (index < lines.length) {
-      const candidate = lines[index].trim();
-      if (
-        !candidate ||
-        candidate.startsWith("```") ||
-        /^(#{1,6})\s+/.test(candidate) ||
-        /^[-*+]\s+/.test(candidate) ||
-        /^\d+\.\s+/.test(candidate) ||
-        candidate.startsWith(">")
-      ) {
-        break;
-      }
-
-      paragraphLines.push(lines[index].trim());
-      index += 1;
-    }
-
-    htmlParts.push(`<p>${renderInlineMarkdown(paragraphLines.join(" "))}</p>`);
-  }
-
-  return htmlParts.join("\n");
+  return marked.parse(content) as string;
 }
 
 interface AssistantEvent {
@@ -511,6 +434,29 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       border-left: 3px solid var(--border);
       background: rgba(11, 18, 32, 0.45);
       border-radius: 6px;
+    }
+
+    .message table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 0 10px;
+      font-size: 13px;
+    }
+
+    .message th,
+    .message td {
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      text-align: left;
+    }
+
+    .message th {
+      background: var(--panel-2);
+      font-weight: 600;
+    }
+
+    .message tr:nth-child(even) td {
+      background: rgba(31, 41, 55, 0.35);
     }
 
     .message a {

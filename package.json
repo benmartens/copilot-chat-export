@@ -2,7 +2,7 @@
   "name": "copilot-chat-export",
   "displayName": "Copilot Chat Export",
   "description": "Preview or save the focused Copilot chat as a self-contained HTML page in VS Code.",
-  "version": "0.0.4",
+  "version": "1.0.4",
   "publisher": "local",
   "repository": {
     "type": "git",
@@ -57,9 +57,13 @@
     "refresh:local": "npm run package:vsix && npm run install:local"
   },
   "devDependencies": {
+    "@types/marked": "^4.3.2",
     "@types/node": "^20.17.0",
     "@types/vscode": "^1.95.0",
     "@vscode/vsce": "^3.2.0",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "marked": "^4.3.0"
   }
 }
