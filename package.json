@@ -2,7 +2,7 @@
   "name": "copilot-chat-export",
   "displayName": "Copilot Chat Export",
   "description": "Preview or save the focused Copilot chat as a self-contained HTML page in VS Code.",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publisher": "local",
   "repository": {
     "type": "git",
