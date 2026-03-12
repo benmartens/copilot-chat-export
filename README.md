@@ -1,32 +1,59 @@
 # Chat Transcript HTML Preview
 
-Local VS Code extension to quick-export the currently focused Copilot chat as a fully self-contained HTML page.
+Local VS Code extension to export the currently focused Copilot chat as a fully self-contained HTML page.
 
 ![Screenshot](screenshot.png)
 
 ## What it does
 
-- Runs from Command Palette in one step.
+- Runs from the Command Palette with fast-path preview/save commands and a guided customize flow.
 - Triggers `Chat: Copy All` for the focused chat view.
 - Parses the copied transcript into turns.
-- Renders Markdown with syntax-highlighted code blocks.
-- Collapses assistant activity (file reads, fetched URLs, planning steps) into expandable summaries to keep exports tidy.
-- Opens a preview of the rendered HTML without writing a file.
-- Saves an `.html` file only when you use the Save As command.
+- Optionally generates a short AI title and summary for the export.
+- Lets you choose whether assistant activity is hidden, collapsed, or shown inline.
+- Lets you include or exclude the summary, metadata header, code blocks, and clickable links.
+- Supports `system`, `light`, and `dark` export themes.
+- Opens a preview of the rendered HTML without writing a file, or saves one `.html` file when requested.
 
 ## Usage
 
 1. Open Copilot Chat and make sure the chat input/view is focused.
 2. Run one of these commands:
+	- `Chat Transcript: Customize Active Chat as HTML...` (guided flow for choosing export options)
 	- `Chat Transcript: Preview Active Chat as HTML` (preview only, no file written)
 	- `Chat Transcript: Save Active Chat to HTML As...` (choose any destination)
-3. The preview command opens an in-editor preview. The Save As command writes one HTML file and opens it.
+3. The customize command asks a short sequence of Quick Pick questions and generates the export immediately after you choose preview or save.
+4. The preview command opens an in-editor preview. The Save As command writes one HTML file and opens it.
 
-## Setting
+## Settings
 
+The `builderDefaults.*` settings are used both by the guided `Customize Active Chat as HTML...` flow and by the fast-path `Preview Active Chat as HTML` and `Save Active Chat to HTML As...` commands. The fast-path commands still force their own action: preview for the preview command, save for the Save As command.
+
+- `chatTranscriptHtmlPreview.generateSummary`
+	- valid values: `true` or `false` (default: `true`)
+	- enables or disables generating the title and summary block for exports
 - `chatTranscriptHtmlPreview.openTarget`
+	- valid values: `vscode` or `external` (default: `vscode`)
 	- `vscode` (default): opens in an in-editor preview
 	- `external`: for Save As, opens the saved file in your default browser
+- `chatTranscriptHtmlPreview.builderDefaults.thinkingMode`
+	- valid values: `hidden`, `collapsed`, or `shown` (default: `hidden`)
+	- default detail level for assistant thinking/tool activity in exports
+- `chatTranscriptHtmlPreview.builderDefaults.includeSummary`
+	- valid values: `true` or `false` (default: `true`)
+	- default whether to include the generated title and summary block
+- `chatTranscriptHtmlPreview.builderDefaults.includeMetadata`
+	- valid values: `true` or `false` (default: `true`)
+	- default whether to include the metadata header
+- `chatTranscriptHtmlPreview.builderDefaults.includeCodeBlocks`
+	- valid values: `true` or `false` (default: `true`)
+	- default whether to include fenced code blocks
+- `chatTranscriptHtmlPreview.builderDefaults.includeLinks`
+	- valid values: `true` or `false` (default: `true`)
+	- default whether links stay clickable
+- `chatTranscriptHtmlPreview.builderDefaults.theme`
+	- valid values: `system`, `light`, or `dark` (default: `system`)
+	- default export theme
 
 ## Notes
 

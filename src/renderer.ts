@@ -1,11 +1,26 @@
-import { ChatTurn } from "./parser";
 import { marked, Renderer } from "marked";
+import { ChatTurn } from "./parser";
 
-interface RenderOptions {
+export type ThinkingMode = "hidden" | "collapsed" | "shown";
+export type ExportTheme = "system" | "light" | "dark";
+export type ExportLayout = "readable";
+
+export interface ExportRenderOptions {
   title: string;
   generatedAt: string;
   version: string;
   summary?: string;
+  thinkingMode: ThinkingMode;
+  includeMetadata: boolean;
+  includeCodeBlocks: boolean;
+  includeLinks: boolean;
+  theme: ExportTheme;
+  layout: ExportLayout;
+}
+
+interface AssistantEvent {
+  summary: string;
+  details: string[];
 }
 
 function escapeHtml(value: string): string {
@@ -23,33 +38,44 @@ function token(): string {
 
 function getLinkDisplayText(text: string, href: string): string {
   const trimmed = text.trim();
-  if (trimmed) { return trimmed; }
-  try { return decodeURIComponent(href); } catch { return href; }
+  if (trimmed) {
+    return trimmed;
+  }
+
+  try {
+    return decodeURIComponent(href);
+  } catch {
+    return href;
+  }
 }
 
-const markedRenderer = new Renderer();
+function createMarkedRenderer(options: ExportRenderOptions): Renderer {
+  const renderer = new Renderer();
 
-// Open links in new tab, fall back to decoded URL when link text is empty
-markedRenderer.link = function (href: string, title: string | null | undefined, text: string): string {
-  const titleAttr = title ? ` title="${title}"` : "";
-  const displayText = getLinkDisplayText(text, href);
-  return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${displayText}</a>`;
-};
+  renderer.link = function (href: string | null, title: string | null | undefined, text: string): string {
+    const safeHref = href ?? "";
+    const displayText = escapeHtml(getLinkDisplayText(text, safeHref));
+    if (!options.includeLinks) {
+      return displayText;
+    }
 
-// Suppress empty code blocks (matches old renderer behavior)
-markedRenderer.code = function (code: string, language: string | undefined): string {
-  if (!code.trim()) { return ""; }
-  const lang = language ? ` class="language-${escapeHtml(language)}"` : "";
-  return `<pre><code${lang}>${escapeHtml(code)}</code></pre>\n`;
-};
+    const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+    return `<a href="${escapeHtml(safeHref)}"${titleAttr} target="_blank" rel="noopener noreferrer">${displayText}</a>`;
+  };
 
-marked.setOptions({
-  gfm: true,
-  breaks: false,
-  renderer: markedRenderer,
-});
+  renderer.code = function (code: string, language: string | undefined): string {
+    if (!options.includeCodeBlocks || !code.trim()) {
+      return "";
+    }
 
-function renderInlineMarkdown(input: string): string {
+    const languageClass = language ? ` class="language-${escapeHtml(language)}"` : "";
+    return `<pre><code${languageClass}>${escapeHtml(code)}</code></pre>\n`;
+  };
+
+  return renderer;
+}
+
+function renderInlineMarkdown(input: string, options: ExportRenderOptions): string {
   let html = escapeHtml(input);
 
   const codeToken = token();
@@ -63,34 +89,39 @@ function renderInlineMarkdown(input: string): string {
   });
 
   html = html.replace(/\[([^\]]*)\]\(((?:https?:\/\/|file:\/\/\/?)\S+?)\)/g, (_match, text: string, href: string) => {
-    const displayText = getLinkDisplayText(text, href);
-    const id = linkSegments.push(
-      `<a href="${href}" target="_blank" rel="noopener noreferrer">${displayText}</a>`
-    ) - 1;
+    const displayText = escapeHtml(getLinkDisplayText(text, href));
+    const segment = options.includeLinks
+      ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${displayText}</a>`
+      : displayText;
+    const id = linkSegments.push(segment) - 1;
     return `${linkToken}${id}${linkToken}`;
   });
 
   html = html.replace(/(^|\s)((?:https?:\/\/|file:\/\/\/?)\S+)/g, (_match, prefix: string, href: string) => {
-    return `${prefix}<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>`;
+    if (!options.includeLinks) {
+      return `${prefix}${escapeHtml(href)}`;
+    }
+
+    const safeHref = escapeHtml(href);
+    return `${prefix}<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeHref}</a>`;
   });
 
   html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/~~([^~]+)~~/g, "<del>$1</del>");
   html = html.replace(/(^|\W)_([^_]+)_($|\W)/g, "$1<em>$2</em>$3");
 
-  html = html.replace(new RegExp(`${linkToken}(\\d+)${linkToken}`, "g"), (_m, id) => linkSegments[Number(id)]);
-  html = html.replace(new RegExp(`${codeToken}(\\d+)${codeToken}`, "g"), (_m, id) => codeSegments[Number(id)]);
+  html = html.replace(new RegExp(`${linkToken}(\\d+)${linkToken}`, "g"), (_match, id) => linkSegments[Number(id)]);
+  html = html.replace(new RegExp(`${codeToken}(\\d+)${codeToken}`, "g"), (_match, id) => codeSegments[Number(id)]);
 
   return html;
 }
 
-function renderMarkdown(content: string): string {
-  return marked.parse(content) as string;
-}
-
-interface AssistantEvent {
-  summary: string;
-  details: string[];
+function renderMarkdown(content: string, options: ExportRenderOptions): string {
+  return marked.parse(content, {
+    gfm: true,
+    breaks: false,
+    renderer: createMarkedRenderer(options),
+  }) as string;
 }
 
 function normalizeEventLine(line: string): string {
@@ -98,7 +129,6 @@ function normalizeEventLine(line: string): string {
 }
 
 const eventPattern = /^(?:planning|preparing|drafting|subagent\s*:|research\b|review\b|ask(?:ed|ing)\s+\d+\s+questions\b|fetched\s+https?:\/\/|read(?:ing)?\s+(?:file:\/\/|\[)|search(?:ed|ing)\s+for\b|starting:\s*\*.*?\*\s*\(\d+\/\d+\)|completed:\s*\*.*?\*\s*\(\d+\/\d+\)|generating\s+patch\b)/i;
-
 const PREFIX_WORD_COUNT = 2;
 const MIN_PREFIX_RUN = 3;
 
@@ -161,7 +191,7 @@ function extractAssistantEvents(content: string): { events: AssistantEvent[]; na
 
     if (details.length >= MIN_PREFIX_RUN) {
       events.push({
-        summary: `${getPrefixDisplay(normalized)}… (${details.length})`,
+        summary: `${getPrefixDisplay(normalized)}... (${details.length})`,
         details,
       });
       index = runEnd;
@@ -175,27 +205,47 @@ function extractAssistantEvents(content: string): { events: AssistantEvent[]; na
   return { events, narrative: narrativeLines.join("\n").trim() };
 }
 
-function renderTurn(turn: ChatTurn): string {
+function renderCollapsedEvents(events: AssistantEvent[], options: ExportRenderOptions): string {
+  return events
+    .map((event) => {
+      const details = event.details.length
+        ? `<ul>${event.details.map((detail) => `<li>${renderInlineMarkdown(detail, options)}</li>`).join("")}</ul>`
+        : "";
+
+      return `<details class="event"><summary>${renderInlineMarkdown(event.summary, options)}</summary>${details}</details>`;
+    })
+    .join("");
+}
+
+function renderShownEvents(events: AssistantEvent[], options: ExportRenderOptions): string {
+  const lines = events.flatMap((event) => (event.details.length > 0 ? event.details : [event.summary]));
+  if (lines.length === 0) {
+    return "";
+  }
+
+  return `<section class="events-inline">${lines
+    .map((line) => `<div class="event-line">${renderInlineMarkdown(line, options)}</div>`)
+    .join("")}</section>`;
+}
+
+function renderTurn(turn: ChatTurn, options: ExportRenderOptions): string {
   if (turn.role === "assistant") {
     const { events, narrative } = extractAssistantEvents(turn.content);
-    const eventHtml = events
-      .map((event) => {
-        const details = event.details.length
-          ? `<ul>${event.details
-              .map((detail) => `<li>${renderInlineMarkdown(detail)}</li>`)
-              .join("")}</ul>`
-          : "";
+    const eventHtml = options.thinkingMode === "hidden"
+      ? ""
+      : options.thinkingMode === "shown"
+        ? renderShownEvents(events, options)
+        : `<section class="events">${renderCollapsedEvents(events, options)}</section>`;
+    const narrativeHtml = narrative ? `<section class="message">${renderMarkdown(narrative, options)}</section>` : "";
 
-        return `<details class="event"><summary>${renderInlineMarkdown(event.summary)}</summary>${details}</details>`;
-      })
-      .join("");
-
-    const narrativeHtml = narrative ? `<section class="message">${renderMarkdown(narrative)}</section>` : "";
+    if (!eventHtml && !narrativeHtml) {
+      return "";
+    }
 
     return `
     <article class="turn assistant">
       <section class="assistant-wrap">
-        ${eventHtml ? `<section class="events">${eventHtml}</section>` : ""}
+        ${eventHtml}
         ${narrativeHtml}
       </section>
     </article>
@@ -204,38 +254,144 @@ function renderTurn(turn: ChatTurn): string {
 
   return `
     <article class="turn ${turn.role}">
-      <section class="message">${renderMarkdown(turn.content)}</section>
+      <section class="message">${renderMarkdown(turn.content, options)}</section>
     </article>
   `;
 }
 
-export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions): string {
+function renderMetadata(options: ExportRenderOptions, title: string, generated: string): string {
+  if (!options.includeMetadata) {
+    return "";
+  }
+
+  return `
+    <header class="top">
+      <h1>${title}</h1>
+      <div class="meta">v${escapeHtml(options.version)} &middot; Generated ${generated}</div>
+    </header>
+  `;
+}
+
+export function renderTranscriptHtml(turns: ChatTurn[], options: ExportRenderOptions): string {
   const generated = escapeHtml(options.generatedAt);
   const title = escapeHtml(options.title);
   const summaryHtml = options.summary?.trim()
-    ? `<section class="summary"><h2>Summary</h2>${renderMarkdown(options.summary.trim())}</section>`
+    ? `<section class="summary"><h2>Summary</h2>${renderMarkdown(options.summary.trim(), options)}</section>`
     : "";
-  const turnHtml = turns.map((turn) => renderTurn(turn)).join("\n");
+  const turnHtml = turns
+    .map((turn) => renderTurn(turn, options))
+    .filter(Boolean)
+    .join("\n");
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="${escapeHtml(options.theme)}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${title}</title>
   <style>
     :root {
+      --light-bg: #eef3f9;
+      --light-panel: rgba(255, 255, 255, 0.92);
+      --light-panel-2: #e8eef7;
+      --light-text: #111827;
+      --light-muted: #64748b;
+      --light-border: rgba(148, 163, 184, 0.34);
+      --light-user-border: rgba(59, 130, 246, 0.34);
+      --light-user-bg: linear-gradient(135deg, rgba(219, 234, 254, 0.96), rgba(239, 246, 255, 0.92));
+      --light-code-bg: #f8fafc;
+      --light-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --light-event-bg: rgba(255, 255, 255, 0.82);
+      --light-top-bg: rgba(255, 255, 255, 0.8);
+      --light-summary-border: rgba(59, 130, 246, 0.34);
+      --dark-bg: #0d1117;
+      --dark-panel: #161b22;
+      --dark-panel-2: #1f2937;
+      --dark-text: #e5e7eb;
+      --dark-muted: #9ca3af;
+      --dark-border: #30363d;
+      --dark-user-border: rgba(59, 130, 246, 0.45);
+      --dark-user-bg: linear-gradient(135deg, rgba(29, 78, 216, 0.42), rgba(29, 78, 216, 0.26));
+      --dark-code-bg: #0b1220;
+      --dark-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+      --dark-event-bg: rgba(22, 27, 34, 0.85);
+      --dark-top-bg: rgba(22, 27, 34, 0.9);
+      --dark-summary-border: rgba(59, 130, 246, 0.45);
+      --link: #2563eb;
+      --link-visited: #1d4ed8;
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg: var(--light-bg);
+      --panel: var(--light-panel);
+      --panel-2: var(--light-panel-2);
+      --text: var(--light-text);
+      --muted: var(--light-muted);
+      --border: var(--light-border);
+      --user-border: var(--light-user-border);
+      --user-bg: var(--light-user-bg);
+      --code-bg: var(--light-code-bg);
+      --shadow: var(--light-shadow);
+      --event-bg: var(--light-event-bg);
+      --top-bg: var(--light-top-bg);
+      --summary-border: var(--light-summary-border);
+    }
+
+    :root[data-theme="dark"] {
       color-scheme: dark;
-      --bg: #0d1117;
-      --panel: #161b22;
-      --panel-2: #1f2937;
-      --text: #e5e7eb;
-      --muted: #9ca3af;
-      --border: #30363d;
-      --user-border: rgba(59, 130, 246, 0.45);
-      --user-bg-1: rgba(29, 78, 216, 0.42);
-      --user-bg-2: rgba(29, 78, 216, 0.26);
-      --code-bg: #0b1220;
+      --bg: var(--dark-bg);
+      --panel: var(--dark-panel);
+      --panel-2: var(--dark-panel-2);
+      --text: var(--dark-text);
+      --muted: var(--dark-muted);
+      --border: var(--dark-border);
+      --user-border: var(--dark-user-border);
+      --user-bg: var(--dark-user-bg);
+      --code-bg: var(--dark-code-bg);
+      --link: #93c5fd;
+      --link-visited: #bfdbfe;
+      --shadow: var(--dark-shadow);
+      --event-bg: var(--dark-event-bg);
+      --top-bg: var(--dark-top-bg);
+      --summary-border: var(--dark-summary-border);
+    }
+
+    :root[data-theme="system"] {
+      color-scheme: light dark;
+      --bg: var(--light-bg);
+      --panel: var(--light-panel);
+      --panel-2: var(--light-panel-2);
+      --text: var(--light-text);
+      --muted: var(--light-muted);
+      --border: var(--light-border);
+      --user-border: var(--light-user-border);
+      --user-bg: var(--light-user-bg);
+      --code-bg: var(--light-code-bg);
+      --shadow: var(--light-shadow);
+      --event-bg: var(--light-event-bg);
+      --top-bg: var(--light-top-bg);
+      --summary-border: var(--light-summary-border);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root[data-theme="system"] {
+        --bg: var(--dark-bg);
+        --panel: var(--dark-panel);
+        --panel-2: var(--dark-panel-2);
+        --text: var(--dark-text);
+        --muted: var(--dark-muted);
+        --border: var(--dark-border);
+        --user-border: var(--dark-user-border);
+        --user-bg: var(--dark-user-bg);
+        --code-bg: var(--dark-code-bg);
+        --link: #93c5fd;
+        --link-visited: #bfdbfe;
+        --shadow: var(--dark-shadow);
+        --event-bg: var(--dark-event-bg);
+        --top-bg: var(--dark-top-bg);
+        --summary-border: var(--dark-summary-border);
+      }
     }
 
     * {
@@ -246,6 +402,9 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       margin: 0;
       background: var(--bg);
       color: var(--text);
+      background-image:
+        radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 28%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 220px);
       font-family: "Segoe UI", Inter, system-ui, -apple-system, sans-serif;
       line-height: 1.45;
     }
@@ -263,12 +422,13 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       gap: 16px;
       margin-bottom: 14px;
       padding: 12px 14px;
-      background: rgba(22, 27, 34, 0.9);
+      background: var(--top-bg);
       border: 1px solid var(--border);
       border-radius: 10px;
       position: sticky;
       top: 10px;
       backdrop-filter: blur(5px);
+      box-shadow: var(--shadow);
     }
 
     .top h1 {
@@ -293,7 +453,7 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       margin: 0 0 12px;
       padding: 10px 12px;
       border: 1px solid var(--border);
-      border-left: 4px solid var(--user-border);
+      border-left: 4px solid var(--summary-border);
       border-radius: 10px;
       background: var(--panel-2);
     }
@@ -325,7 +485,7 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       border: 1px solid var(--border);
       border-radius: 10px;
       background: var(--panel);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+      box-shadow: var(--shadow);
     }
 
     .turn.user .message {
@@ -334,7 +494,7 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       margin-left: auto;
       border: 1px solid var(--user-border);
       border-radius: 12px;
-      background: var(--user-bg-1);
+      background: var(--user-bg);
     }
 
     .assistant-wrap {
@@ -350,10 +510,40 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       gap: 6px;
     }
 
+    .events-inline {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--event-bg);
+    }
+
+    .event-line {
+      color: var(--muted);
+      font-size: 13px;
+      word-break: break-word;
+    }
+
+    .event-line::before {
+      content: "Activity";
+      display: inline-block;
+      margin-right: 8px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
     .event {
       border: 1px solid var(--border);
       border-radius: 8px;
-      background: rgba(22, 27, 34, 0.85);
+      background: var(--event-bg);
       padding: 0;
       overflow: hidden;
     }
@@ -411,12 +601,23 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       line-height: 1.25;
     }
 
-    .message h1 { font-size: 20px; }
-    .message h2 { font-size: 18px; }
-    .message h3 { font-size: 16px; }
+    .message h1 {
+      font-size: 20px;
+    }
+
+    .message h2 {
+      font-size: 18px;
+    }
+
+    .message h3 {
+      font-size: 16px;
+    }
+
     .message h4,
     .message h5,
-    .message h6 { font-size: 14px; }
+    .message h6 {
+      font-size: 14px;
+    }
 
     .message ul,
     .message ol {
@@ -432,7 +633,7 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
       margin: 0 0 10px;
       padding: 8px 10px;
       border-left: 3px solid var(--border);
-      background: rgba(11, 18, 32, 0.45);
+      background: color-mix(in srgb, var(--code-bg) 68%, transparent);
       border-radius: 6px;
     }
 
@@ -456,12 +657,16 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
     }
 
     .message tr:nth-child(even) td {
-      background: rgba(31, 41, 55, 0.35);
+      background: color-mix(in srgb, var(--panel-2) 82%, transparent);
     }
 
     .message a {
-      color: #93c5fd;
+      color: var(--link);
       text-decoration: underline;
+    }
+
+    .message a:visited {
+      color: var(--link-visited);
     }
 
     pre {
@@ -496,10 +701,7 @@ export function renderTranscriptHtml(turns: ChatTurn[], options: RenderOptions):
 </head>
 <body>
   <div class="wrap">
-    <header class="top">
-      <h1>${title}</h1>
-      <div class="meta">v${escapeHtml(options.version)} &middot; Generated ${generated}</div>
-    </header>
+    ${renderMetadata(options, title, generated)}
     ${summaryHtml}
     <main class="thread">
       ${turnHtml}

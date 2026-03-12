@@ -18,6 +18,11 @@
   "contributes": {
     "commands": [
       {
+        "command": "chatTranscriptHtmlPreview.customizeActiveChatAsHtml",
+        "title": "Customize Active Chat as HTML...",
+        "category": "Chat Transcript"
+      },
+      {
         "command": "chatTranscriptHtmlPreview.exportActiveChatToHtml",
         "title": "Preview Active Chat as HTML",
         "category": "Chat Transcript"
@@ -44,6 +49,46 @@
           ],
           "default": "vscode",
           "description": "Where to open exported HTML. 'vscode' opens in an in-editor preview. 'external' opens the saved file in your default browser."
+        },
+        "chatTranscriptHtmlPreview.builderDefaults.thinkingMode": {
+          "type": "string",
+          "enum": [
+            "hidden",
+            "collapsed",
+            "shown"
+          ],
+          "default": "hidden",
+          "description": "Default detail level for assistant thinking and tool activity in exports."
+        },
+        "chatTranscriptHtmlPreview.builderDefaults.includeSummary": {
+          "type": "boolean",
+          "default": true,
+          "description": "Default whether the export includes the generated title and summary block."
+        },
+        "chatTranscriptHtmlPreview.builderDefaults.includeMetadata": {
+          "type": "boolean",
+          "default": true,
+          "description": "Default whether the export includes the metadata header."
+        },
+        "chatTranscriptHtmlPreview.builderDefaults.includeCodeBlocks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Default whether fenced code blocks are included in exported HTML."
+        },
+        "chatTranscriptHtmlPreview.builderDefaults.includeLinks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Default whether links remain clickable in exported HTML."
+        },
+        "chatTranscriptHtmlPreview.builderDefaults.theme": {
+          "type": "string",
+          "enum": [
+            "system",
+            "light",
+            "dark"
+          ],
+          "default": "system",
+          "description": "Default theme for exported HTML."
         }
       }
     }
